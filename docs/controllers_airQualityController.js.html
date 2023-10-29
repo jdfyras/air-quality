@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: controllers/airQualityController.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: controllers/airQualityController.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>const axios = require('axios')
+const AirQualityModel = require('../models/airQualityModel')
+
+/**
+ * @typedef {Object} AirQualityData
+ * @property {number} ts - Timestamp of the air quality data.
+ * @property {number} aqius - Air Quality Index (AQI) for the United States.
+ * @property {string} mainus - Main pollutant for AQI in the United States.
+ * @property {number} aqicn - Air Quality Index (AQI) for China.
+ * @property {string} maincn - Main pollutant for AQI in China.
+ */
+
+module.exports = {
+    /**
+     * Get air quality data for a given latitude and longitude.
+     *
+     * @param {import('express').Request} req - Express request object.
+     * @param {import('express').Response} res - Express response object.
+     * @param {import('express').NextFunction} next - Express next function.
+     */
+    getAirQuality: async (req, res, next) => {
+        try {
+            const { latitude, longitude } = req.query
+
+            if (!latitude || !longitude) {
+                return res.status(400).json({
+                    success: false,
+                    statusCode: 400,
+                    message: 'Les coordonnées GPS (latitude et longitude) sont requises.'
+                })
+            }
+
+            let params = new URLSearchParams()
+            params.append('lat', req.params.lat)
+            params.append('lon', req.params.lon)
+            params.append('key', process.env.API_KEY)
+            let config = {
+                method: 'get',
+                maxBodyLength: Infinity,
+                url: `${process.env.URL}/v2/nearest_city`,
+                params
+            }
+
+            let response = await axios.request(config)
+
+            /**
+             * Formatted air quality data.
+             *
+             * @type {AirQualityData}
+             */
+            const airQualityData = {
+                result: {
+                    pollution: {
+                        ts: response.data.data.current.weather.ts,
+                        aqius: response.data.data.current.pollution.aqius,
+                        mainus: response.data.data.current.pollution.mainus,
+                        aqicn: response.data.data.current.pollution.aqicn,
+                        maincn: response.data.data.current.pollution.maincn
+                    }
+                }
+            }
+
+            return res.json(airQualityData)
+        } catch (err) {
+            console.error(err)
+            return next({
+                message:
+                    "Une erreur s'est produite lors de la récupération de la qualité de l'air.",
+                status: 500
+            })
+        }
+    },
+
+    /**
+     * Get the most polluted air quality data.
+     *
+     * @param {import('express').Request} req - Express request object.
+     * @param {import('express').Response} res - Express response object.
+     * @param {import('express').NextFunction} next - Express next function.
+     */
+    getMostPolluted: async (req, res, next) => {
+        try {
+            const mostPollutedData = await AirQualityModel.findOne({}).sort({
+                aqius: -1,
+                timestamp: -1
+            })
+
+            if (!mostPollutedData) {
+                return res.status(404).json({ message: 'No air quality data found.' })
+            }
+
+            res.json(mostPollutedData.timestamp)
+        } catch (err) {
+            console.error('Error in GET /most-polluted-time:', err)
+            return next({
+                message: 'Internal server error',
+                status: 500
+            })
+        }
+    },
+
+    /**
+     * A cron job to retrieve air quality data for a specific location (e.g., Paris).
+     */
+    airQualityCronJob: async () => {
+        try {
+            let params = new URLSearchParams()
+            params.append('lat', 48.856613)
+            params.append('lon', 2.352222)
+            params.append('key', process.env.API_KEY)
+            let config = {
+                method: 'get',
+                maxBodyLength: Infinity,
+                url: `${process.env.URL}/v2/nearest_city`,
+                params
+            }
+
+            let response = await axios.request(config)
+
+            /**
+             * Air quality data for a specific city (e.g., Paris).
+             *
+             * @type {AirQualityData}
+             */
+            const airQualityData = {
+                city: 'Paris',
+                latitude: 48.856613,
+                longitude: 2.352222,
+                timestamp: new Date(),
+                aqius: response.data.data.current.pollution.aqius,
+                mainus: response.data.data.current.pollution.mainus,
+                aqicn: response.data.data.current.pollution.aqicn,
+                maincn: response.data.data.current.pollution.maincn
+            }
+
+            const airQuality = new AirQualityModel(airQualityData)
+            await airQuality.save()
+
+            console.log(
+                "Données de qualité de l'air de Paris enregistrées avec succès.",
+                airQualityData
+            )
+        } catch (error) {
+            console.error("Erreur lors de la récupération de la qualité de l'air de Paris :", error)
+        }
+    }
+}
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#airQualityModel">airQualityModel</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.2</a> on Sun Oct 29 2023 22:33:51 GMT+0100 (UTC+01:00)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
